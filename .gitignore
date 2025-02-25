@@ -8,3 +8,4 @@ __pycache__/
 *.pyz
 *.pywz
 *.pyc
+certs/corporate-ca.crt

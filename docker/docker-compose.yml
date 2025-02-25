@@ -10,21 +10,18 @@ services:
     restart: always
 
   odc:
-    build: .
-    ports:
-      - "8888:8888"
+    build:
+      context: ../
+      dockerfile: docker/odc/Dockerfile
+      args:
+        INCLUDE_CORP_CERT: "true"
     environment:
-      - DB_HOSTNAME=postgres
-      - ODC_DEFAULT_DB_HOSTNAME=postgres
-      - DB_USERNAME=piksel_user
       - ODC_DEFAULT_DB_USERNAME=piksel_user
-      - DB_DATABASE=piksel_db
       - ODC_DEFAULT_DB_DATABASE=piksel_db
-      - DB_PASSWORD=passwordPiksel
+      - ODC_DEFAULT_DB_HOSTNAME=postgres
       - ODC_DEFAULT_DB_PASSWORD=passwordPiksel
     volumes:
       - ../datacube.conf:/root/.datacube.conf
-      - ../notebooks:/home/venv/notebooks
       - ../products:/home/venv/products
     depends_on:
       - postgres

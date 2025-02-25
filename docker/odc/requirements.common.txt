@@ -1,0 +1,6 @@
+boto3
+importlib_resources
+psycopg2-binary
+lark
+sqlalchemy
+deprecat
