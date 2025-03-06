@@ -4,11 +4,13 @@
 # Settings
 COMPOSE_FILE := docker/docker-compose.yml
 PROJECT_NAME := piksel
-ENVIRONMENT ?= myenv
+TEST_COMPOSE_FILE := docker/docker-compose.test.yml
+ENVIRONMENT ?= default
 EPSG ?= 9468
 
 # Common Docker Compose command with environment variables
 DOCKER_COMPOSE = docker compose --env-file .env -f $(COMPOSE_FILE) -p $(PROJECT_NAME)
+DOCKER_COMPOSE_TEST = docker compose --env-file .env.test -f $(TEST_COMPOSE_FILE) -p $(PROJECT_NAME)-test
 
 # Colors for pretty output
 BLUE=\033[34;1m
@@ -62,12 +64,25 @@ help:
 	@echo "For example: ${GREEN}make index-sentinel2a Bbox='115,-10,117,-8' Date='2021-01-01/2021-01-31'${NC}"
 	@echo ""
 	@echo "${GREEN}Utility Commands:${NC}"
-	@echo "  make bash-odc      - Open a shell in the ODC container"
-	@echo "  make bash-jupyter  - Open a shell in the Jupyter container"
-	@echo "  make jupyter-token - Get the Jupyter token"
-	@echo "  make compile-deps  - Compile dependencies from requirements.in to requirements.txt"
-	@echo "  make update-deps   - Update all dependencies to their latest versions"
-	@echo "  make verify-deps   - Verify dependencies are correctly installed"
+	@echo "  make bash-odc               - Open a shell in the ODC container"
+	@echo "  make bash-jupyter           - Open a shell in the Jupyter container"
+	@echo "  make jupyter-token          - Get the Jupyter token"
+	@echo "  make compile-deps           - Compile dependencies from requirements.in to requirements.txt"
+	@echo "  make update-deps            - Update all dependencies to their latest versions"
+	@echo "  make verify-deps            - Verify dependencies are correctly installed"
+	@echo ""
+	@echo "${GREEN}Test Environment Commands:${NC}"
+	@echo "  make test-up       - Start the test environment containers"
+	@echo "  make test-down     - Stop and remove test environment containers"
+	@echo "  make test-clean    - Clean up the test environment containers and volumes"
+	@echo "  make test-run      - Run integration tests in the test environment"
+	@echo ""
+	@echo "${GREEN}Test Commands:${NC}"
+	@echo "  make test          - Run all tests"
+	@echo "  make test-unit     - Run unit tests only"
+	@echo "  make test-integration - Run integration tests only"
+	@echo ""
+
 
 # Docker commands
 .PHONY: build up stop down rmvol restart ps logs clean setup-config init check-env check-config
@@ -272,7 +287,7 @@ jupyter-token:
 	fi
 
 # Dependencies management commands
-.PHONY: compile-deps update-deps verify-deps
+.PHONY: compile-deps update-deps verify-deps compile-test-deps test-container
 
 compile-deps:
 	@echo "$(BLUE)Compiling dependencies from requirements.in to requirements.txt...$(NC)"
@@ -297,3 +312,55 @@ verify-deps:
 		echo "\n\033[32mPackages that would be installed:\033[0m" && \
 		pip install --dry-run -r docker/odc/requirements.txt | grep -v "^Requirement already satisfied"'
 	@echo "$(GREEN)Dependencies verified!$(NC)"
+
+# Test Environment Setup Commands
+.PHONY: test-up test-down test-clean test-run
+
+test-up:
+	@echo "${BLUE}Starting test environment containers...${NC}"
+	@$(DOCKER_COMPOSE_TEST) up -d
+	@echo "${GREEN}Test environment is running.${NC}"
+
+test-down:
+	@echo "${BLUE}Stopping and removing test environment containers...${NC}"
+	@$(DOCKER_COMPOSE_TEST) down
+	@echo "${GREEN}Test environment stopped and removed.${NC}"
+
+test-clean:
+	@echo "${BLUE}Cleaning up test environment containers and volumes...${NC}"
+	@$(DOCKER_COMPOSE_TEST) down -v
+	@echo "${GREEN}Test environment cleaned up.${NC}"
+
+test-run: test-up
+	@echo "${BLUE}Running integration tests in the test environment...${NC}"
+	@.venv-test/bin/python -m pytest -xvs test/integration/
+	@$(MAKE) test-down
+	@echo "${GREEN}Integration tests completed.${NC}"
+
+# Test commands
+.PHONY: test test-unit test-integration test-venv
+
+# Create/update test virtual environment
+test-venv:
+	@echo "$(BLUE)Creating/updating test virtual environment...$(NC)"
+	@python3 -m venv .venv-test
+	@.venv-test/bin/pip install --upgrade pip
+	@.venv-test/bin/pip install pytest pytest-cov python-dotenv docker psycopg2-binary datacube pytest-dependency
+	@echo "$(GREEN)Test virtual environment ready at .venv-test$(NC)"
+
+# Run tests using the virtual environment
+test: test-venv
+	@echo "$(BLUE)Running all tests...$(NC)"
+	@.venv-test/bin/python -m pytest -xvs test/
+
+test-unit: test-venv
+	@echo "$(BLUE)Running unit tests...$(NC)"
+	@.venv-test/bin/python -m pytest -xvs test/unit/
+
+test-integration: build up test-venv
+	@echo "$(BLUE)Running integration tests...$(NC)"
+	@.venv-test/bin/python -m pytest -xvs test/integration/
+	
+test-coverage: test-venv
+	@echo "$(BLUE)Running tests with coverage reporting...$(NC)"
+	@.venv-test/bin/python -m pytest -xvs --cov=src --cov-report=term --cov-report=html:coverage test/
